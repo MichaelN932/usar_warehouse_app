@@ -138,11 +138,17 @@ export function RequestItems() {
 
       await requestsApi.create({
         requestedBy: user.id,
-        requestedByName: `${user.firstName} ${user.lastName}`,
-        status: 'Pending',
-        requestDate: new Date().toISOString(),
         notes: notes || undefined,
-        lines: lines as RequestLine[],
+        lines: lines.map(({ itemTypeId, itemTypeName, requestedSizeId, requestedSizeName, preferredVariantId, preferredVariantName, quantity, replacementReason }) => ({
+          itemTypeId,
+          itemTypeName,
+          requestedSizeId,
+          requestedSizeName,
+          preferredVariantId,
+          preferredVariantName,
+          quantity,
+          replacementReason,
+        })),
       });
 
       setCart([]);

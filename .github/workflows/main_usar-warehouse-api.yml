@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'api'
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'warehouse-api'
   NODE_VERSION: '20.x'
 
 jobs:

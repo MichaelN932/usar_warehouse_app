@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPE Inventory - Grouped Table with Modal (v2)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Hide number input arrows */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] { -moz-appearance: textfield; }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#F7F9FB',
+              100: '#E8EDF2',
+              200: '#D1DBE5',
+              300: '#A3B7CC',
+              400: '#7593B2',
+              500: '#476F99',
+              600: '#1A4B7A',
+              700: '#143D66',
+              800: '#0F2F52',
+              900: '#0D1B2A',
+            },
+            action: {
+              primary: '#0066FF',
+              hover: '#0052CC',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Header -->
+  <div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-primary-900">PPE Inventory</h1>
+        <p class="text-sm text-gray-500">Click a product to view and edit size quantities</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div id="unsaved-indicator" class="hidden text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+          <span class="font-medium">2</span> unsaved changes
+        </div>
+        <button class="px-4 py-2 bg-action-primary text-white rounded-lg hover:bg-action-hover transition-colors text-sm font-medium">
+          Save All
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white border-b border-gray-200 px-6 py-3">
+    <div class="flex items-center gap-4">
+      <div class="relative flex-1 max-w-md">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xl">search</span>
+        <input type="text" placeholder="Search products..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-action-primary focus:border-action-primary">
+      </div>
+      <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-action-primary">
+        <option>All Categories</option>
+        <option>BDUs</option>
+        <option>Boots</option>
+        <option>Gloves</option>
+      </select>
+      <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+        <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-action-primary focus:ring-action-primary">
+        <span>Low stock only</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="px-6 py-4">
+    <div class="grid grid-cols-4 gap-4">
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-primary-900">74</div>
+        <div class="text-sm text-gray-500">Products</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-green-600">3,847</div>
+        <div class="text-sm text-gray-500">Total On Hand</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-sky-600">412</div>
+        <div class="text-sm text-gray-500">Currently Issued</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-amber-600">12</div>
+        <div class="text-sm text-gray-500">Low Stock Items</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Table -->
+  <div class="px-6 pb-6">
+    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <th class="px-4 py-3">Product</th>
+            <th class="px-4 py-3">Manufacturer</th>
+            <th class="px-4 py-3">Category</th>
+            <th class="px-4 py-3 text-center">Sizes</th>
+            <th class="px-4 py-3 text-right">On Hand</th>
+            <th class="px-4 py-3 text-right">Issued</th>
+            <th class="px-4 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+
+          <!-- Row 1 -->
+          <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="openModal('5.11 Stryke EMS Pants', '5.11 Tactical', 'BDUs', 27, 559, 47, 'good')">
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">5.11 Stryke EMS Pants</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0087.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">5.11 Tactical</td>
+            <td class="px-4 py-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">BDUs</span></td>
+            <td class="px-4 py-3 text-center"><span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">27</span></td>
+            <td class="px-4 py-3 text-right font-semibold text-green-600">559</td>
+            <td class="px-4 py-3 text-right text-gray-500">47</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Good
+              </span>
+            </td>
+          </tr>
+
+          <!-- Row 2 -->
+          <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="openModal('Tru-Spec BDU Pants', 'Tru-Spec', 'BDUs', 15, 348, 0, 'low')">
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Tru-Spec BDU Pants</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0088.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Tru-Spec</td>
+            <td class="px-4 py-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">BDUs</span></td>
+            <td class="px-4 py-3 text-center"><span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">15</span></td>
+            <td class="px-4 py-3 text-right font-semibold text-amber-600">348</td>
+            <td class="px-4 py-3 text-right text-gray-500">0</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Low (3)
+              </span>
+            </td>
+          </tr>
+
+          <!-- Row 3 -->
+          <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="openModal('Tru-Spec BDU Blouse', 'Tru-Spec', 'BDUs', 15, 494, 38, 'critical')">
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Tru-Spec BDU Blouse</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0089.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Tru-Spec</td>
+            <td class="px-4 py-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">BDUs</span></td>
+            <td class="px-4 py-3 text-center"><span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">15</span></td>
+            <td class="px-4 py-3 text-right font-semibold text-red-600">494</td>
+            <td class="px-4 py-3 text-right text-gray-500">38</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Critical (2)
+              </span>
+            </td>
+          </tr>
+
+          <!-- Row 4 -->
+          <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="openModal('Globe Technical Rescue Boot', 'Globe', 'Boots', 8, 18, 0, 'low')">
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Globe Technical Rescue Boot</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0045.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Globe</td>
+            <td class="px-4 py-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Boots</span></td>
+            <td class="px-4 py-3 text-center"><span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">8</span></td>
+            <td class="px-4 py-3 text-right font-semibold text-amber-600">18</td>
+            <td class="px-4 py-3 text-right text-gray-500">0</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Low (2)
+              </span>
+            </td>
+          </tr>
+
+          <!-- Row 5 -->
+          <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="openModal('Mechanix Wear M-Pact Gloves', 'Mechanix', 'Gloves', 5, 89, 12, 'good')">
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Mechanix Wear M-Pact Gloves</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0023.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Mechanix</td>
+            <td class="px-4 py-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Gloves</span></td>
+            <td class="px-4 py-3 text-center"><span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">5</span></td>
+            <td class="px-4 py-3 text-right font-semibold text-green-600">89</td>
+            <td class="px-4 py-3 text-right text-gray-500">12</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Good
+              </span>
+            </td>
+          </tr>
+
+          <!-- Row 6 -->
+          <tr class="hover:bg-gray-50 cursor-pointer transition-colors" onclick="openModal('ESS Crossbow Eyeshield', 'ESS', 'Eyewear', 1, 45, 8, 'good')">
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">ESS Crossbow Eyeshield</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0067.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">ESS</td>
+            <td class="px-4 py-3"><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Eyewear</span></td>
+            <td class="px-4 py-3 text-center"><span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">1</span></td>
+            <td class="px-4 py-3 text-right font-semibold text-green-600">45</td>
+            <td class="px-4 py-3 text-right text-gray-500">8</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Good
+              </span>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL OVERLAY -->
+  <!-- ============================================== -->
+  <div id="modal-overlay" class="hidden fixed inset-0 bg-black/50 z-40" onclick="closeModal()"></div>
+
+  <!-- ============================================== -->
+  <!-- SIZE GRID MODAL -->
+  <!-- ============================================== -->
+  <div id="size-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
+        <div>
+          <h2 id="modal-title" class="text-lg font-semibold text-primary-900">Tru-Spec BDU Blouse</h2>
+          <p id="modal-subtitle" class="text-sm text-gray-500 mt-0.5">Tru-Spec • BDUs • 15 sizes</p>
+        </div>
+        <button onclick="closeModal()" class="p-2 hover:bg-gray-100 rounded-lg transition-colors -mr-2 -mt-1">
+          <span class="material-symbols-outlined text-gray-400">close</span>
+        </button>
+      </div>
+
+      <!-- Summary Stats Bar -->
+      <div class="px-6 py-3 bg-gray-50 border-b border-gray-200">
+        <div class="flex items-center gap-6 text-sm">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+            <span class="text-gray-600">In Stock: <strong class="text-primary-900" id="stat-instock">11</strong></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span class="text-gray-600">Low: <strong class="text-amber-600" id="stat-low">2</strong></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-red-500"></span>
+            <span class="text-gray-600">Out: <strong class="text-red-600" id="stat-out">2</strong></span>
+          </div>
+          <div class="flex items-center gap-1.5 ml-auto">
+            <span class="material-symbols-outlined text-base text-sky-600">assignment_ind</span>
+            <span class="text-gray-600">Total Issued: <strong class="text-sky-600" id="stat-issued">38</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Excel-Style Grid -->
+      <div class="flex-1 overflow-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0">
+            <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <th class="px-4 py-3 w-24">Size</th>
+              <th class="px-4 py-3">Size Detail</th>
+              <th class="px-4 py-3 text-right w-28">On Hand</th>
+              <th class="px-4 py-3 text-right w-24">Issued</th>
+              <th class="px-4 py-3 w-24">Status</th>
+              <th class="px-4 py-3 w-10"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100" id="size-grid-body">
+            <!-- Rows populated by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div id="modal-changes-indicator" class="hidden text-sm text-sky-600">
+          <span class="font-medium">2</span> sizes modified
+        </div>
+        <div class="flex items-center gap-3 ml-auto">
+          <button onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium">
+            Cancel
+          </button>
+          <button class="px-4 py-2 bg-action-primary text-white rounded-lg hover:bg-action-hover transition-colors text-sm font-medium">
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- QUANTITY EDIT MODAL (nested) -->
+  <!-- ============================================== -->
+  <div id="edit-modal" class="hidden fixed inset-0 z-60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md" onclick="event.stopPropagation()">
+
+      <!-- Edit Modal Header -->
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-primary-900">Adjust Quantity</h3>
+        <p id="edit-subtitle" class="text-sm text-gray-500 mt-0.5">Size: MR (W:31-35 I:29½-32½)</p>
+      </div>
+
+      <!-- Edit Modal Body -->
+      <div class="px-6 py-6">
+
+        <!-- Current Info -->
+        <div class="bg-gray-50 rounded-lg p-4 mb-6">
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div class="text-gray-500">Current On Hand</div>
+              <div class="text-2xl font-bold text-primary-900" id="edit-current">45</div>
+            </div>
+            <div>
+              <div class="text-gray-500">Currently Issued</div>
+              <div class="text-2xl font-bold text-sky-600" id="edit-issued">8</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quantity Input -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-2">New Quantity</label>
+          <div class="flex items-center gap-3">
+            <button onclick="adjustQty(-10)" class="w-12 h-12 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center transition-colors text-sm font-medium">-10</button>
+            <button onclick="adjustQty(-1)" class="w-12 h-12 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center transition-colors text-xl font-medium">−</button>
+            <input type="number" id="edit-new-qty" value="45" class="flex-1 h-12 text-center text-xl font-bold border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary focus:border-action-primary">
+            <button onclick="adjustQty(1)" class="w-12 h-12 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center transition-colors text-xl font-medium">+</button>
+            <button onclick="adjustQty(10)" class="w-12 h-12 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center transition-colors text-sm font-medium">+10</button>
+          </div>
+        </div>
+
+        <!-- Delta Preview -->
+        <div id="edit-delta" class="hidden bg-sky-50 border border-sky-200 rounded-lg p-4 mb-6">
+          <div class="flex items-center justify-center gap-3 text-lg">
+            <span class="text-gray-400 line-through" id="delta-old">45</span>
+            <span class="material-symbols-outlined text-sky-500">arrow_forward</span>
+            <span class="font-bold text-sky-600" id="delta-new">52</span>
+            <span id="delta-badge" class="px-2 py-1 rounded text-sm font-bold bg-green-100 text-green-600">+7</span>
+          </div>
+        </div>
+
+        <!-- Reason (optional) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Reason (optional)</label>
+          <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-action-primary">
+            <option>Count adjustment</option>
+            <option>Received shipment</option>
+            <option>Damaged/Lost</option>
+            <option>Returned from field</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Edit Modal Footer -->
+      <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
+        <button onclick="closeEditModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium">
+          Cancel
+        </button>
+        <button onclick="applyQtyChange()" class="px-4 py-2 bg-action-primary text-white rounded-lg hover:bg-action-hover transition-colors text-sm font-medium">
+          Apply Change
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    // Sample size data for demo
+    const sizeData = [
+      { size: 'SL', detail: 'W:27-31 I:32½-35½', onHand: 0, issued: 0, status: 'out' },
+      { size: 'SR', detail: 'W:27-31 I:29½-32½', onHand: 13, issued: 0, status: 'good' },
+      { size: 'SS', detail: 'W:27-31 I:26½-29½', onHand: 11, issued: 0, status: 'good' },
+      { size: 'ML', detail: 'W:31-35 I:32½-35½', onHand: 0, issued: 1, status: 'out' },
+      { size: 'MR', detail: 'W:31-35 I:29½-32½', onHand: 45, issued: 8, status: 'good', modified: true, newQty: 52 },
+      { size: 'MS', detail: 'W:31-35 I:26½-29½', onHand: 28, issued: 3, status: 'good' },
+      { size: 'LL', detail: 'W:35-39 I:32½-35½', onHand: 8, issued: 5, status: 'low' },
+      { size: 'LR', detail: 'W:35-39 I:29½-32½', onHand: 67, issued: 4, status: 'good' },
+      { size: 'LS', detail: 'W:35-39 I:26½-29½', onHand: 34, issued: 2, status: 'good' },
+      { size: 'XLL', detail: 'W:39-43 I:32½-35½', onHand: 5, issued: 1, status: 'low' },
+      { size: 'XLR', detail: 'W:39-43 I:29½-32½', onHand: 42, issued: 6, status: 'good' },
+      { size: 'XLS', detail: 'W:39-43 I:26½-29½', onHand: 19, issued: 2, status: 'good' },
+      { size: '2XLR', detail: 'W:43-47 I:29½-32½', onHand: 24, issued: 4, status: 'good', modified: true, newQty: 20 },
+      { size: '2XLS', detail: 'W:43-47 I:26½-29½', onHand: 15, issued: 0, status: 'good' },
+      { size: '3XLR', detail: 'W:47-51 I:29½-32½', onHand: 12, issued: 0, status: 'good' },
+    ];
+
+    let currentEditIndex = -1;
+    let currentEditOriginal = 0;
+
+    function openModal(name, mfr, category, sizes, onHand, issued, status) {
+      document.getElementById('modal-title').textContent = name;
+      document.getElementById('modal-subtitle').textContent = `${mfr} • ${category} • ${sizes} sizes`;
+
+      renderSizeGrid();
+
+      document.getElementById('modal-overlay').classList.remove('hidden');
+      document.getElementById('size-modal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.add('hidden');
+      document.getElementById('size-modal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    function renderSizeGrid() {
+      const tbody = document.getElementById('size-grid-body');
+      tbody.innerHTML = '';
+
+      sizeData.forEach((row, index) => {
+        const displayQty = row.modified ? row.newQty : row.onHand;
+        const isModified = row.modified;
+
+        let statusBadge = '';
+        let rowBg = '';
+        let qtyClass = 'text-primary-900';
+
+        if (row.status === 'out' || displayQty === 0) {
+          statusBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Out</span>';
+          rowBg = 'bg-red-50';
+          qtyClass = 'text-red-600';
+        } else if (row.status === 'low' || displayQty <= 10) {
+          statusBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">Low</span>';
+          rowBg = 'bg-amber-50';
+          qtyClass = 'text-amber-600';
+        } else {
+          statusBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">OK</span>';
+        }
+
+        const modifiedIndicator = isModified ? `
+          <div class="flex items-center gap-1 text-xs text-sky-600 mt-0.5">
+            <span class="line-through text-gray-400">${row.onHand}</span>
+            <span>→</span>
+            <span class="font-semibold">${row.newQty}</span>
+          </div>
+        ` : '';
+
+        const tr = document.createElement('tr');
+        tr.className = `hover:bg-gray-50 cursor-pointer transition-colors ${rowBg} ${isModified ? 'ring-1 ring-inset ring-sky-300' : ''}`;
+        tr.onclick = () => openEditModal(index);
+        tr.innerHTML = `
+          <td class="px-4 py-3">
+            <span class="font-semibold text-primary-900">${row.size}</span>
+          </td>
+          <td class="px-4 py-3 text-gray-600">${row.detail}</td>
+          <td class="px-4 py-3 text-right">
+            <span class="font-semibold ${qtyClass}">${displayQty}</span>
+            ${modifiedIndicator}
+          </td>
+          <td class="px-4 py-3 text-right text-gray-500">${row.issued}</td>
+          <td class="px-4 py-3">${statusBadge}</td>
+          <td class="px-4 py-3">
+            <span class="material-symbols-outlined text-gray-300 text-lg">chevron_right</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update modified count
+      const modifiedCount = sizeData.filter(s => s.modified).length;
+      const indicator = document.getElementById('modal-changes-indicator');
+      if (modifiedCount > 0) {
+        indicator.classList.remove('hidden');
+        indicator.innerHTML = `<span class="font-medium">${modifiedCount}</span> size${modifiedCount > 1 ? 's' : ''} modified`;
+      } else {
+        indicator.classList.add('hidden');
+      }
+    }
+
+    function openEditModal(index) {
+      const row = sizeData[index];
+      currentEditIndex = index;
+      currentEditOriginal = row.onHand;
+
+      document.getElementById('edit-subtitle').textContent = `Size: ${row.size} (${row.detail})`;
+      document.getElementById('edit-current').textContent = row.onHand;
+      document.getElementById('edit-issued').textContent = row.issued;
+
+      const currentQty = row.modified ? row.newQty : row.onHand;
+      document.getElementById('edit-new-qty').value = currentQty;
+
+      updateDeltaPreview();
+
+      document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+      currentEditIndex = -1;
+    }
+
+    function adjustQty(delta) {
+      const input = document.getElementById('edit-new-qty');
+      let val = parseInt(input.value) || 0;
+      val = Math.max(0, val + delta);
+      input.value = val;
+      updateDeltaPreview();
+    }
+
+    function updateDeltaPreview() {
+      const newQty = parseInt(document.getElementById('edit-new-qty').value) || 0;
+      const oldQty = currentEditOriginal;
+      const delta = newQty - oldQty;
+
+      const deltaEl = document.getElementById('edit-delta');
+
+      if (delta !== 0) {
+        deltaEl.classList.remove('hidden');
+        document.getElementById('delta-old').textContent = oldQty;
+        document.getElementById('delta-new').textContent = newQty;
+
+        const badge = document.getElementById('delta-badge');
+        if (delta > 0) {
+          badge.textContent = `+${delta}`;
+          badge.className = 'px-2 py-1 rounded text-sm font-bold bg-green-100 text-green-600';
+        } else {
+          badge.textContent = delta;
+          badge.className = 'px-2 py-1 rounded text-sm font-bold bg-red-100 text-red-600';
+        }
+      } else {
+        deltaEl.classList.add('hidden');
+      }
+    }
+
+    function applyQtyChange() {
+      const newQty = parseInt(document.getElementById('edit-new-qty').value) || 0;
+      const row = sizeData[currentEditIndex];
+
+      if (newQty !== row.onHand) {
+        row.modified = true;
+        row.newQty = newQty;
+      } else {
+        row.modified = false;
+        delete row.newQty;
+      }
+
+      renderSizeGrid();
+      closeEditModal();
+    }
+
+    // Listen for input changes
+    document.getElementById('edit-new-qty').addEventListener('input', updateDeltaPreview);
+  </script>
+
+</body>
+</html>

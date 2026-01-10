@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPE Inventory - Grouped Table Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#F7F9FB',
+              100: '#E8EDF2',
+              200: '#D1DBE5',
+              300: '#A3B7CC',
+              400: '#7593B2',
+              500: '#476F99',
+              600: '#1A4B7A',
+              700: '#143D66',
+              800: '#0F2F52',
+              900: '#0D1B2A',
+            },
+            action: {
+              primary: '#0066FF',
+              hover: '#0052CC',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Header -->
+  <div class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-primary-900">PPE Inventory</h1>
+        <p class="text-sm text-gray-500">Grouped by product with expandable size variants</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-gray-500">2 unsaved changes</span>
+        <button class="px-4 py-2 bg-action-primary text-white rounded-lg hover:bg-action-hover transition-colors text-sm font-medium">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white border-b border-gray-200 px-6 py-3">
+    <div class="flex items-center gap-4">
+      <div class="relative flex-1 max-w-md">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xl">search</span>
+        <input
+          type="text"
+          placeholder="Search products..."
+          class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-action-primary focus:border-action-primary"
+        >
+      </div>
+      <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-action-primary">
+        <option>All Categories</option>
+        <option>BDUs</option>
+        <option>Boots</option>
+        <option>Gloves</option>
+        <option>Eyewear</option>
+      </select>
+      <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+        <input type="checkbox" class="w-4 h-4 rounded border-gray-300 text-action-primary focus:ring-action-primary">
+        <span>Show low stock only</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Stats Summary -->
+  <div class="px-6 py-4">
+    <div class="grid grid-cols-4 gap-4">
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-primary-900">74</div>
+        <div class="text-sm text-gray-500">Products</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-green-600">3,847</div>
+        <div class="text-sm text-gray-500">Total On Hand</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-sky-600">412</div>
+        <div class="text-sm text-gray-500">Currently Issued</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 border border-gray-200">
+        <div class="text-2xl font-bold text-amber-600">12</div>
+        <div class="text-sm text-gray-500">Low Stock Items</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Table -->
+  <div class="px-6 pb-6">
+    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <th class="px-4 py-3 w-10"></th>
+            <th class="px-4 py-3">Product</th>
+            <th class="px-4 py-3">Manufacturer</th>
+            <th class="px-4 py-3">Category</th>
+            <th class="px-4 py-3 text-center">Sizes</th>
+            <th class="px-4 py-3 text-right">On Hand</th>
+            <th class="px-4 py-3 text-right">Issued</th>
+            <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3 w-10"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+
+          <!-- Row 1: Collapsed -->
+          <tr class="hover:bg-gray-50 cursor-pointer" onclick="toggleRow('row1')">
+            <td class="px-4 py-3">
+              <span id="chevron-row1" class="material-symbols-outlined text-gray-400 transition-transform">chevron_right</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">5.11 Stryke EMS Pants</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0087.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">5.11 Tactical</td>
+            <td class="px-4 py-3">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">BDUs</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">27</span>
+            </td>
+            <td class="px-4 py-3 text-right font-semibold text-green-600">559</td>
+            <td class="px-4 py-3 text-right text-gray-500">47</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Good
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button class="p-1 hover:bg-gray-100 rounded" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined text-gray-400 text-xl">more_vert</span>
+              </button>
+            </td>
+          </tr>
+          <tr id="expanded-row1" class="hidden">
+            <td colspan="9" class="bg-slate-50 px-4 py-4">
+              <!-- This would show size grid when expanded -->
+            </td>
+          </tr>
+
+          <!-- Row 2: Collapsed with Low Stock -->
+          <tr class="hover:bg-gray-50 cursor-pointer" onclick="toggleRow('row2')">
+            <td class="px-4 py-3">
+              <span id="chevron-row2" class="material-symbols-outlined text-gray-400 transition-transform">chevron_right</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Tru-Spec BDU Pants</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0088.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Tru-Spec</td>
+            <td class="px-4 py-3">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">BDUs</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">15</span>
+            </td>
+            <td class="px-4 py-3 text-right font-semibold text-amber-600">348</td>
+            <td class="px-4 py-3 text-right text-gray-500">0</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                Low (3)
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button class="p-1 hover:bg-gray-100 rounded" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined text-gray-400 text-xl">more_vert</span>
+              </button>
+            </td>
+          </tr>
+          <tr id="expanded-row2" class="hidden">
+            <td colspan="9" class="bg-slate-50 px-4 py-4"></td>
+          </tr>
+
+          <!-- Row 3: EXPANDED with Critical Status -->
+          <tr class="bg-slate-50 cursor-pointer" onclick="toggleRow('row3')">
+            <td class="px-4 py-3">
+              <span id="chevron-row3" class="material-symbols-outlined text-gray-400 transition-transform rotate-90">chevron_right</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Tru-Spec BDU Blouse</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0089.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Tru-Spec</td>
+            <td class="px-4 py-3">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">BDUs</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">15</span>
+            </td>
+            <td class="px-4 py-3 text-right font-semibold text-red-600">494</td>
+            <td class="px-4 py-3 text-right text-gray-500">38</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                Critical (2)
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button class="p-1 hover:bg-gray-100 rounded" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined text-gray-400 text-xl">more_vert</span>
+              </button>
+            </td>
+          </tr>
+
+          <!-- Expanded Size Grid for Row 3 -->
+          <tr id="expanded-row3">
+            <td colspan="9" class="bg-slate-50 px-6 py-4 border-b-2 border-slate-200">
+
+              <!-- Summary Bar -->
+              <div class="bg-white rounded-lg p-3 mb-4 border border-slate-200">
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                      <span class="text-gray-600">In Stock: <strong class="text-primary-900">11</strong></span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                      <span class="text-gray-600">Low: <strong class="text-amber-600">2</strong></span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                      <span class="text-gray-600">Out: <strong class="text-red-600">2</strong></span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-sky-600">
+                      <span class="material-symbols-outlined text-base">assignment_ind</span>
+                      <span>Issued: <strong>38</strong></span>
+                    </div>
+                  </div>
+                  <button class="text-xs text-action-primary hover:underline">Collapse all</button>
+                </div>
+              </div>
+
+              <!-- Size Grid -->
+              <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+
+                <!-- Size Card: Out of Stock -->
+                <div class="border-2 border-red-400 bg-red-50 rounded-xl p-3 text-center">
+                  <div class="font-bold text-sm text-primary-900">SL</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:27-31 I:32½-35½">W:27-31 I:32½-35½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="0" class="w-14 h-11 text-center text-lg font-semibold border-2 border-red-400 rounded-lg bg-red-50 focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">0 issued</div>
+                </div>
+
+                <!-- Size Card: Normal -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">SR</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:27-31 I:29½-32½">W:27-31 I:29½-32½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="13" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">2 issued</div>
+                </div>
+
+                <!-- Size Card: Normal -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">SS</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:27-31 I:26½-29½">W:27-31 I:26½-29½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="11" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">0 issued</div>
+                </div>
+
+                <!-- Size Card: Out of Stock -->
+                <div class="border-2 border-red-400 bg-red-50 rounded-xl p-3 text-center">
+                  <div class="font-bold text-sm text-primary-900">ML</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:31-35 I:32½-35½">W:31-35 I:32½-35½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="0" class="w-14 h-11 text-center text-lg font-semibold border-2 border-red-400 rounded-lg bg-red-50 focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">1 issued</div>
+                </div>
+
+                <!-- Size Card: With Pending Change (Sky Blue) -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center ring-2 ring-sky-400 ring-offset-2">
+                  <div class="font-bold text-sm text-primary-900">MR</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:31-35 I:29½-32½">W:31-35 I:29½-32½</div>
+                  <!-- Delta Preview -->
+                  <div class="flex items-center justify-center gap-1.5 text-xs mt-2 py-1 bg-sky-100 rounded">
+                    <span class="text-slate-400 line-through">45</span>
+                    <span class="text-sky-500">→</span>
+                    <span class="font-bold text-sky-600">52</span>
+                    <span class="px-1 rounded text-[10px] font-bold bg-green-100 text-green-600">+7</span>
+                  </div>
+                  <div class="flex items-center justify-center gap-1.5 mt-2">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="52" class="w-14 h-11 text-center text-lg font-semibold border-2 border-sky-400 rounded-lg bg-sky-50 focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">8 issued</div>
+                </div>
+
+                <!-- Size Card: Normal -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">MS</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:31-35 I:26½-29½">W:31-35 I:26½-29½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="28" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">3 issued</div>
+                </div>
+
+                <!-- Size Card: Low Stock (Amber) -->
+                <div class="border-2 border-amber-400 bg-amber-50 rounded-xl p-3 text-center">
+                  <div class="font-bold text-sm text-primary-900">LL</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:35-39 I:32½-35½">W:35-39 I:32½-35½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="8" class="w-14 h-11 text-center text-lg font-semibold border-2 border-amber-400 rounded-lg bg-amber-50 focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">5 issued</div>
+                </div>
+
+                <!-- Size Card: Normal -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">LR</div>
+                  <div class="text-xs text-gray-500 truncate" title="W:35-39 I:29½-32½">W:35-39 I:29½-32½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="67" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">4 issued</div>
+                </div>
+
+                <!-- More size cards... -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">LS</div>
+                  <div class="text-xs text-gray-500 truncate">W:35-39 I:26½-29½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="34" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">2 issued</div>
+                </div>
+
+                <!-- Size Card: Low Stock (Amber) -->
+                <div class="border-2 border-amber-400 bg-amber-50 rounded-xl p-3 text-center">
+                  <div class="font-bold text-sm text-primary-900">XLL</div>
+                  <div class="text-xs text-gray-500 truncate">W:39-43 I:32½-35½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="5" class="w-14 h-11 text-center text-lg font-semibold border-2 border-amber-400 rounded-lg bg-amber-50 focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">1 issued</div>
+                </div>
+
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">XLR</div>
+                  <div class="text-xs text-gray-500 truncate">W:39-43 I:29½-32½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="42" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">6 issued</div>
+                </div>
+
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">XLS</div>
+                  <div class="text-xs text-gray-500 truncate">W:39-43 I:26½-29½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="19" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">2 issued</div>
+                </div>
+
+                <!-- With pending change (decrease) -->
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center ring-2 ring-sky-400 ring-offset-2">
+                  <div class="font-bold text-sm text-primary-900">2XLR</div>
+                  <div class="text-xs text-gray-500 truncate">W:43-47 I:29½-32½</div>
+                  <!-- Delta Preview (decrease) -->
+                  <div class="flex items-center justify-center gap-1.5 text-xs mt-2 py-1 bg-sky-100 rounded">
+                    <span class="text-slate-400 line-through">24</span>
+                    <span class="text-sky-500">→</span>
+                    <span class="font-bold text-sky-600">20</span>
+                    <span class="px-1 rounded text-[10px] font-bold bg-red-100 text-red-600">-4</span>
+                  </div>
+                  <div class="flex items-center justify-center gap-1.5 mt-2">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="20" class="w-14 h-11 text-center text-lg font-semibold border-2 border-sky-400 rounded-lg bg-sky-50 focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">4 issued</div>
+                </div>
+
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">2XLS</div>
+                  <div class="text-xs text-gray-500 truncate">W:43-47 I:26½-29½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="15" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">0 issued</div>
+                </div>
+
+                <div class="border-2 border-slate-200 bg-white rounded-xl p-3 text-center hover:border-slate-300 transition-colors">
+                  <div class="font-bold text-sm text-primary-900">3XLR</div>
+                  <div class="text-xs text-gray-500 truncate">W:47-51 I:29½-32½</div>
+                  <div class="flex items-center justify-center gap-1.5 mt-3">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">−</button>
+                    <input type="number" value="12" class="w-14 h-11 text-center text-lg font-semibold border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary">
+                    <button class="w-11 h-11 rounded-lg bg-white border border-slate-300 text-primary-700 hover:bg-slate-50 flex items-center justify-center transition-all active:scale-95 text-xl font-medium">+</button>
+                  </div>
+                  <div class="text-xs text-sky-600 mt-2">0 issued</div>
+                </div>
+
+              </div>
+
+              <!-- Legend -->
+              <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500 pt-4 mt-4 border-t border-slate-200">
+                <div class="flex items-center gap-1.5">
+                  <span class="w-4 h-4 rounded border-2 border-red-400 bg-red-50"></span>
+                  <span>Out of stock</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-4 h-4 rounded border-2 border-amber-400 bg-amber-50"></span>
+                  <span>Low stock (&le;10)</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-4 h-4 rounded ring-2 ring-sky-400 bg-sky-50"></span>
+                  <span>Pending change</span>
+                </div>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- Row 4: Collapsed -->
+          <tr class="hover:bg-gray-50 cursor-pointer" onclick="toggleRow('row4')">
+            <td class="px-4 py-3">
+              <span id="chevron-row4" class="material-symbols-outlined text-gray-400 transition-transform">chevron_right</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Globe Technical Rescue Boot</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0045.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Globe</td>
+            <td class="px-4 py-3">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Boots</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">8</span>
+            </td>
+            <td class="px-4 py-3 text-right font-semibold text-amber-600">18</td>
+            <td class="px-4 py-3 text-right text-gray-500">0</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                Low (2)
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button class="p-1 hover:bg-gray-100 rounded" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined text-gray-400 text-xl">more_vert</span>
+              </button>
+            </td>
+          </tr>
+          <tr id="expanded-row4" class="hidden">
+            <td colspan="9" class="bg-slate-50 px-4 py-4"></td>
+          </tr>
+
+          <!-- Row 5: Collapsed -->
+          <tr class="hover:bg-gray-50 cursor-pointer" onclick="toggleRow('row5')">
+            <td class="px-4 py-3">
+              <span id="chevron-row5" class="material-symbols-outlined text-gray-400 transition-transform">chevron_right</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">Mechanix Wear M-Pact Gloves</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0023.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">Mechanix</td>
+            <td class="px-4 py-3">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Gloves</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">5</span>
+            </td>
+            <td class="px-4 py-3 text-right font-semibold text-green-600">89</td>
+            <td class="px-4 py-3 text-right text-gray-500">12</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Good
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button class="p-1 hover:bg-gray-100 rounded" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined text-gray-400 text-xl">more_vert</span>
+              </button>
+            </td>
+          </tr>
+          <tr id="expanded-row5" class="hidden">
+            <td colspan="9" class="bg-slate-50 px-4 py-4"></td>
+          </tr>
+
+          <!-- Row 6: Collapsed -->
+          <tr class="hover:bg-gray-50 cursor-pointer" onclick="toggleRow('row6')">
+            <td class="px-4 py-3">
+              <span id="chevron-row6" class="material-symbols-outlined text-gray-400 transition-transform">chevron_right</span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-primary-900">ESS Crossbow Eyeshield</div>
+              <div class="text-xs text-gray-500">FEMA: LG-0067.00</div>
+            </td>
+            <td class="px-4 py-3 text-gray-600">ESS</td>
+            <td class="px-4 py-3">
+              <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Eyewear</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span class="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">1</span>
+            </td>
+            <td class="px-4 py-3 text-right font-semibold text-green-600">45</td>
+            <td class="px-4 py-3 text-right text-gray-500">8</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Good
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button class="p-1 hover:bg-gray-100 rounded" onclick="event.stopPropagation()">
+                <span class="material-symbols-outlined text-gray-400 text-xl">more_vert</span>
+              </button>
+            </td>
+          </tr>
+          <tr id="expanded-row6" class="hidden">
+            <td colspan="9" class="bg-slate-50 px-4 py-4"></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Footer with pagination -->
+  <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3">
+    <div class="flex items-center justify-between">
+      <div class="text-sm text-gray-500">
+        Showing 1-6 of 74 products
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50" disabled>Previous</button>
+        <button class="px-3 py-1 bg-action-primary text-white rounded text-sm">1</button>
+        <button class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">2</button>
+        <button class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">3</button>
+        <button class="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleRow(rowId) {
+      const expanded = document.getElementById('expanded-' + rowId);
+      const chevron = document.getElementById('chevron-' + rowId);
+
+      if (expanded.classList.contains('hidden')) {
+        expanded.classList.remove('hidden');
+        chevron.classList.add('rotate-90');
+      } else {
+        expanded.classList.add('hidden');
+        chevron.classList.remove('rotate-90');
+      }
+    }
+  </script>
+
+</body>
+</html>

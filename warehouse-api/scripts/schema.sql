@@ -30,6 +30,9 @@ CREATE TABLE ItemTypes (
     categoryId NVARCHAR(36) NOT NULL REFERENCES Categories(id),
     name NVARCHAR(200) NOT NULL,
     description NVARCHAR(1000),
+    subcategory NVARCHAR(100),           -- e.g., "BDUs", "Outerwear", "T-Shirts"
+    type NVARCHAR(100),                   -- e.g., "Bottoms", "Tops", "Accessories"
+    deployment NVARCHAR(50) NOT NULL DEFAULT 'CA-TF2',  -- e.g., "CA-TF2", "USAID"
     femaCode NVARCHAR(50),
     femaRequiredQty INT NOT NULL DEFAULT 0,
     parLevel INT NOT NULL DEFAULT 0,
@@ -54,6 +57,8 @@ CREATE TABLE Sizes (
     id NVARCHAR(36) PRIMARY KEY,
     variantId NVARCHAR(36) NOT NULL REFERENCES Variants(id),
     name NVARCHAR(100) NOT NULL,
+    sizeDetail NVARCHAR(100),             -- e.g., "27-31 / 29½-32½" for waist/inseam ranges
+    legacyId NVARCHAR(100),               -- Original ITEM_ID from Excel for reference
     sortOrder INT NOT NULL DEFAULT 0,
     isActive BIT NOT NULL DEFAULT 1
 );
@@ -63,6 +68,7 @@ CREATE TABLE Inventory (
     sizeId NVARCHAR(36) PRIMARY KEY REFERENCES Sizes(id),
     quantityOnHand INT NOT NULL DEFAULT 0,
     quantityReserved INT NOT NULL DEFAULT 0,
+    quantityOut INT NOT NULL DEFAULT 0,   -- Items currently issued to personnel
     lastCountDate DATETIME2,
     lastCountBy NVARCHAR(36) REFERENCES Users(id)
 );
@@ -225,8 +231,11 @@ CREATE TABLE AuditLog (
 
 -- Create indexes for performance
 CREATE INDEX IX_ItemTypes_categoryId ON ItemTypes(categoryId);
+CREATE INDEX IX_ItemTypes_subcategory ON ItemTypes(subcategory);
+CREATE INDEX IX_ItemTypes_deployment ON ItemTypes(deployment);
 CREATE INDEX IX_Variants_itemTypeId ON Variants(itemTypeId);
 CREATE INDEX IX_Sizes_variantId ON Sizes(variantId);
+CREATE INDEX IX_Sizes_legacyId ON Sizes(legacyId);
 CREATE INDEX IX_Requests_requestedBy ON Requests(requestedBy);
 CREATE INDEX IX_Requests_status ON Requests(status);
 CREATE INDEX IX_RequestLines_requestId ON RequestLines(requestId);

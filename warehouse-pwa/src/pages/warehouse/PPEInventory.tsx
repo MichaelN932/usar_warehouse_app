@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Modal, EmptyState } from '../../components/ui';
-import { ppeApi, PPEInventoryItem, PPEInventorySummary, PPEIssuedRecord, PPEActivityLog, usersApi } from '../../services/api';
+import { ppeApi, PPEInventoryItem, PPEInventorySummary, PPEIssuedRecord, PPEActivityLog, usersApi, GroupedProduct, groupInventoryByProduct } from '../../services/api';
 import { ppeCategories } from '../../data/ppe-seed-data';
 import { User } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { SizeQuantityGrid } from '../../components/warehouse/SizeQuantityGrid';
 import {
   getSizeOptions,
   getSubcategoriesForCategory,
@@ -176,6 +177,14 @@ export function PPEInventory() {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Size grid pending changes state (for batch save)
+  const [pendingQuantityChanges, setPendingQuantityChanges] = useState<Record<string, number>>({});
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
+
+  // Grouped view state (one row per product instead of per size)
+  const [isGroupedView, setIsGroupedView] = useState(true); // Default to grouped view
+  const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
+
   // Column filter state
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const [openFilterColumn, setOpenFilterColumn] = useState<SortField | null>(null);
@@ -316,6 +325,41 @@ export function PPEInventory() {
 
       const comparison = String(aVal).localeCompare(String(bVal));
       return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredItems, sortField, sortDirection]);
+
+  // Grouped products (one row per product instead of per size)
+  const groupedProducts = useMemo(() => {
+    const grouped = groupInventoryByProduct(filteredItems);
+    // Sort by product name or other field
+    return grouped.sort((a, b) => {
+      if (sortField === 'itemTypeName') {
+        return sortDirection === 'asc'
+          ? a.itemTypeName.localeCompare(b.itemTypeName)
+          : b.itemTypeName.localeCompare(a.itemTypeName);
+      }
+      if (sortField === 'categoryName') {
+        return sortDirection === 'asc'
+          ? a.categoryName.localeCompare(b.categoryName)
+          : b.categoryName.localeCompare(a.categoryName);
+      }
+      if (sortField === 'manufacturer') {
+        return sortDirection === 'asc'
+          ? a.manufacturer.localeCompare(b.manufacturer)
+          : b.manufacturer.localeCompare(a.manufacturer);
+      }
+      if (sortField === 'quantityOnHand') {
+        return sortDirection === 'asc'
+          ? a.totalOnHand - b.totalOnHand
+          : b.totalOnHand - a.totalOnHand;
+      }
+      if (sortField === 'quantityOut') {
+        return sortDirection === 'asc'
+          ? a.totalOut - b.totalOut
+          : b.totalOut - a.totalOut;
+      }
+      // Default sort by name
+      return a.itemTypeName.localeCompare(b.itemTypeName);
     });
   }, [filteredItems, sortField, sortDirection]);
 
@@ -685,6 +729,7 @@ export function PPEInventory() {
 
   const openDetailModal = async (item: PPEInventoryItem) => {
     setSelectedItem(item);
+    setSelectedProduct(null); // Clear grouped product selection
     setIsEditMode(false);
     setEditForm({});
     setAdjustmentReason('count');
@@ -707,6 +752,52 @@ export function PPEInventory() {
       ]);
       setIssuedRecords(records);
       setActivityLogs(logs);
+    } finally {
+      setIsLoadingIssued(false);
+      setIsLoadingActivityLogs(false);
+    }
+  };
+
+  // Open detail modal for a grouped product (shows all sizes)
+  const openGroupedProductModal = async (product: GroupedProduct) => {
+    setSelectedProduct(product);
+    setSelectedItem(product.sizes[0]); // Select first size as default for edit operations
+    setIsEditMode(false);
+    setEditForm({});
+    setAdjustmentReason('count');
+    setAdjustmentNote('');
+    setAdjustmentQty(product.sizes[0]?.quantityOnHand || 0);
+    setSelectedUserId('');
+    setUserSearchQuery('');
+    setDetailModalTab('overview');
+    setThresholdValue(product.sizes[0]?.lowStockThreshold ?? 10);
+    setIsEditingThreshold(false);
+    setPendingQuantityChanges({}); // Clear pending changes
+    setIsDetailModalOpen(true);
+
+    // Load issued records and activity logs for ALL sizes in this product
+    setIsLoadingIssued(true);
+    setIsLoadingActivityLogs(true);
+    try {
+      const allRecords: PPEIssuedRecord[] = [];
+      const allLogs: PPEActivityLog[] = [];
+
+      await Promise.all(
+        product.sizes.map(async (size) => {
+          const [records, logs] = await Promise.all([
+            ppeApi.getIssuedRecords(size.sizeId),
+            ppeApi.getActivityLog(size.sizeId),
+          ]);
+          allRecords.push(...records);
+          allLogs.push(...logs);
+        })
+      );
+
+      // Sort logs by date descending
+      allLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      setIssuedRecords(allRecords);
+      setActivityLogs(allLogs);
     } finally {
       setIsLoadingIssued(false);
       setIsLoadingActivityLogs(false);
@@ -854,6 +945,61 @@ export function PPEInventory() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handle batch save of pending quantity changes from size grid
+  const handleBatchSaveQuantities = async () => {
+    if (Object.keys(pendingQuantityChanges).length === 0) return;
+
+    setIsSavingBatch(true);
+    try {
+      const updatedByName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unknown';
+
+      // Save each pending change
+      for (const [sizeId, newQuantityOnHand] of Object.entries(pendingQuantityChanges)) {
+        // Find the original item to get current quantityOut
+        const originalItem = items.find(i => i.sizeId === sizeId);
+        const quantityOut = originalItem?.quantityOut || 0;
+
+        await ppeApi.updateItem(
+          sizeId,
+          {
+            quantityOnHand: newQuantityOnHand,
+            quantityTotal: newQuantityOnHand + quantityOut,
+            status: newQuantityOnHand > 0 ? 'IN' : 'OUT',
+          },
+          updatedByName,
+          'Batch quantity adjustment'
+        );
+      }
+
+      // Clear pending changes and refresh data
+      setPendingQuantityChanges({});
+      await loadData();
+
+      // Refresh the selected item if it was updated
+      if (selectedItem && pendingQuantityChanges[selectedItem.sizeId] !== undefined) {
+        const updatedItem = await ppeApi.getInventoryBySizeId(selectedItem.sizeId);
+        if (updatedItem) {
+          setSelectedItem(updatedItem);
+        }
+      }
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  // Clear pending changes when modal closes
+  const handleCloseDetailModal = () => {
+    // If there are unsaved changes, confirm before closing
+    if (Object.keys(pendingQuantityChanges).length > 0) {
+      if (!window.confirm('You have unsaved changes. Are you sure you want to close?')) {
+        return;
+      }
+    }
+    setPendingQuantityChanges({});
+    setIsDetailModalOpen(false);
+    setIsEditMode(false);
   };
 
   // Filter users for dropdown
@@ -1097,6 +1243,22 @@ export function PPEInventory() {
               </div>
             )}
           </div>
+
+          {/* Grouped/Flat View Toggle */}
+          <button
+            onClick={() => setIsGroupedView(!isGroupedView)}
+            className={`px-3 py-2 flex items-center gap-1 text-sm border rounded-lg transition-colors ${
+              isGroupedView
+                ? 'bg-action-primary text-white border-action-primary'
+                : 'bg-white text-primary-600 border-border-default hover:bg-primary-50'
+            }`}
+            title={isGroupedView ? 'Switch to flat view (one row per size)' : 'Switch to grouped view (one row per product)'}
+          >
+            <span className="material-symbols-outlined text-lg">
+              {isGroupedView ? 'view_list' : 'view_module'}
+            </span>
+            <span className="hidden sm:inline">{isGroupedView ? 'Grouped' : 'Flat'}</span>
+          </button>
         </div>
       </div>
 
@@ -1120,8 +1282,173 @@ export function PPEInventory() {
             }
           />
         </Card>
+      ) : isGroupedView ? (
+        /* Grouped View - One row per product */
+        <div className="bg-white shadow-sm border border-border-default overflow-hidden rounded-lg">
+          <div className="overflow-auto max-h-[calc(100vh-240px)]">
+            <table className="w-full border-collapse">
+              <thead className="bg-primary-100 sticky top-0 z-20 shadow-sm">
+                <tr>
+                  <th
+                    className="px-3 py-2 text-left text-xs font-semibold text-primary-700 cursor-pointer hover:bg-primary-200 select-none"
+                    onClick={() => handleSort('itemTypeName')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Product Name
+                      {sortField === 'itemTypeName' && (
+                        <span className="material-symbols-outlined text-sm">
+                          {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="px-3 py-2 text-left text-xs font-semibold text-primary-700 cursor-pointer hover:bg-primary-200 select-none"
+                    onClick={() => handleSort('manufacturer')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Manufacturer
+                      {sortField === 'manufacturer' && (
+                        <span className="material-symbols-outlined text-sm">
+                          {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="px-3 py-2 text-left text-xs font-semibold text-primary-700 cursor-pointer hover:bg-primary-200 select-none"
+                    onClick={() => handleSort('categoryName')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Category
+                      {sortField === 'categoryName' && (
+                        <span className="material-symbols-outlined text-sm">
+                          {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-primary-700">
+                    Sizes
+                  </th>
+                  <th
+                    className="px-3 py-2 text-right text-xs font-semibold text-primary-700 cursor-pointer hover:bg-primary-200 select-none"
+                    onClick={() => handleSort('quantityOnHand')}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      On Hand
+                      {sortField === 'quantityOnHand' && (
+                        <span className="material-symbols-outlined text-sm">
+                          {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="px-3 py-2 text-right text-xs font-semibold text-primary-700 cursor-pointer hover:bg-primary-200 select-none"
+                    onClick={() => handleSort('quantityOut')}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      Issued
+                      {sortField === 'quantityOut' && (
+                        <span className="material-symbols-outlined text-sm">
+                          {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-primary-700">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-default">
+                {groupedProducts.map((product, index) => (
+                  <tr
+                    key={product.variantId}
+                    onClick={() => openGroupedProductModal(product)}
+                    className={`hover:bg-action-primary/5 transition-colors cursor-pointer ${
+                      index % 2 === 0 ? 'bg-white' : 'bg-primary-50/40'
+                    } ${
+                      product.hasLowStock && !product.hasOutOfStock
+                        ? '!bg-amber-50'
+                        : product.hasOutOfStock
+                        ? '!bg-red-50'
+                        : ''
+                    }`}
+                  >
+                    <td className="px-3 py-2.5 text-sm">
+                      <div className="font-medium text-primary-900">{product.itemTypeName}</div>
+                      {product.femaCode && (
+                        <div className="text-xs text-primary-500">{product.femaCode}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm text-primary-600">{product.manufacturer}</td>
+                    <td className="px-3 py-2.5 text-sm text-primary-600">
+                      <div>{product.categoryName}</div>
+                      {product.subcategory && (
+                        <div className="text-xs text-primary-400">{product.subcategory}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm text-center">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
+                        {product.sizeCount} {product.sizeCount === 1 ? 'size' : 'sizes'}
+                      </span>
+                      {(product.lowStockCount > 0 || product.outOfStockCount > 0) && (
+                        <div className="flex items-center justify-center gap-1 mt-1 text-xs">
+                          {product.outOfStockCount > 0 && (
+                            <span className="text-red-600">{product.outOfStockCount} out</span>
+                          )}
+                          {product.lowStockCount > 0 && (
+                            <span className="text-amber-600">{product.lowStockCount} low</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm text-right">
+                      <span className={`font-semibold ${
+                        product.totalOnHand === 0 ? 'text-red-600' :
+                        product.hasLowStock ? 'text-amber-600' : 'text-green-600'
+                      }`}>
+                        {product.totalOnHand}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-sm text-right">
+                      <span className="text-sky-600 font-medium">{product.totalOut}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-sm text-center">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        product.overallStatus === 'Out of Stock'
+                          ? 'bg-red-100 text-red-700'
+                          : product.overallStatus === 'Low Stock'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          product.overallStatus === 'Out of Stock'
+                            ? 'bg-red-500'
+                            : product.overallStatus === 'Low Stock'
+                            ? 'bg-amber-500'
+                            : 'bg-green-500'
+                        }`} />
+                        {product.overallStatus}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-2 border-t border-border-default bg-primary-50 text-sm text-primary-600 flex justify-between items-center">
+            <span>
+              Showing {groupedProducts.length} products ({sortedItems.length} total sizes)
+              {activeFilterCount > 0 && ` (${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active)`}
+            </span>
+            <span className="text-xs text-primary-400">Click row to view all sizes • Click header to sort</span>
+          </div>
+        </div>
       ) : (
-        /* Spreadsheet View - Full width with frozen header */
+        /* Flat View - One row per size (original) */
         <div className="bg-white shadow-sm border border-border-default overflow-hidden rounded-lg">
           <div className="overflow-auto max-h-[calc(100vh-240px)]">
             <table className="w-full border-collapse">
@@ -1170,27 +1497,78 @@ export function PPEInventory() {
       {/* Item Detail/Edit Modal */}
       <Modal
         isOpen={isDetailModalOpen}
-        onClose={() => { setIsDetailModalOpen(false); setIsEditMode(false); }}
-        title={isEditMode ? 'Edit Item' : (selectedItem ? getDisplayName(selectedItem) : 'Item Details')}
-        subtitle={!isEditMode && selectedItem ? `${selectedItem.manufacturer} • ${selectedItem.sizeName} • ${selectedItem.femaCode || 'No FEMA Code'}` : undefined}
+        onClose={handleCloseDetailModal}
+        title={
+          isEditMode
+            ? 'Edit Item'
+            : selectedProduct
+            ? selectedProduct.itemTypeName
+            : selectedItem
+            ? getDisplayName(selectedItem)
+            : 'Item Details'
+        }
+        subtitle={
+          !isEditMode && selectedItem
+            ? (() => {
+                // Line 1: Manufacturer • Category › Subcategory • X sizes
+                const sizeCount = selectedProduct ? selectedProduct.sizeCount : 1;
+                const line1Parts = [
+                  selectedItem.manufacturer || 'Unknown',
+                  selectedItem.subcategory
+                    ? `${selectedItem.categoryName} › ${selectedItem.subcategory}`
+                    : selectedItem.categoryName,
+                  `${sizeCount} size${sizeCount !== 1 ? 's' : ''}`,
+                ];
+                const line1 = line1Parts.join(' • ');
+
+                // Line 2: FEMA Code • Item ID
+                const line2Parts = [
+                  selectedItem.femaCode && `FEMA: ${selectedItem.femaCode}`,
+                  selectedItem.legacyId && `ID: ${selectedItem.legacyId}`,
+                ].filter(Boolean);
+                const line2 = line2Parts.length > 0 ? line2Parts.join(' • ') : null;
+
+                return line2 ? `${line1}\n${line2}` : line1;
+              })()
+            : undefined
+        }
         size="wide"
         footer={
-          <div className="flex justify-between w-full">
+          <div className="flex items-center justify-between w-full">
             {!isEditMode ? (
               <>
-                <button
-                  onClick={startEditMode}
-                  className="px-4 py-2 text-sm font-medium text-action-primary bg-action-primary/10 rounded-lg hover:bg-action-primary/20 transition-colors flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-lg">edit</span>
-                  Edit Item
-                </button>
-                <button
-                  onClick={() => setIsDetailModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200 transition-colors"
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={startEditMode}
+                    className="px-4 py-2 text-sm font-medium text-action-primary bg-action-primary/10 rounded-lg hover:bg-action-primary/20 transition-colors flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-lg">edit</span>
+                    Edit Item
+                  </button>
+                  {Object.keys(pendingQuantityChanges).length > 0 && (
+                    <span className="text-sm text-yellow-700 bg-yellow-100 px-3 py-1.5 rounded-full">
+                      {Object.keys(pendingQuantityChanges).length} unsaved {Object.keys(pendingQuantityChanges).length === 1 ? 'change' : 'changes'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleCloseDetailModal}
+                    className="px-4 py-2 text-sm font-medium text-primary-700 bg-primary-100 rounded-lg hover:bg-primary-200 transition-colors"
+                  >
+                    {Object.keys(pendingQuantityChanges).length > 0 ? 'Cancel' : 'Close'}
+                  </button>
+                  {Object.keys(pendingQuantityChanges).length > 0 && (
+                    <button
+                      onClick={handleBatchSaveQuantities}
+                      disabled={isSavingBatch}
+                      className="px-4 py-2 text-sm font-medium text-white bg-action-primary rounded-lg hover:bg-action-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-lg">save</span>
+                      {isSavingBatch ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  )}
+                </div>
               </>
             ) : (
               <>
@@ -1213,30 +1591,62 @@ export function PPEInventory() {
         }
       >
         {selectedItem && !isEditMode && (
-          <div className="space-y-3">
-            {/* Compact Stats Row */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 py-2 border-b border-border-default text-sm">
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${
-                  getComputedStatus(selectedItem) === 'In Stock' ? 'bg-green-500' :
-                  getComputedStatus(selectedItem) === 'Low Stock' ? 'bg-yellow-500' : 'bg-red-500'
-                }`} />
-                <span className="font-medium text-primary-900">{getComputedStatus(selectedItem)}</span>
-              </div>
-              <div className="flex items-center gap-4 text-primary-600">
-                <span><strong className="text-green-600">{selectedItem.quantityOnHand}</strong> on hand</span>
-                <span><strong className="text-blue-600">{selectedItem.quantityOut || 0}</strong> issued</span>
-                <span><strong className="text-primary-700">{selectedItem.quantityTotal || 0}</strong> total</span>
-              </div>
-              <button
-                onClick={() => setIsEditingThreshold(true)}
-                className="ml-auto flex items-center gap-1.5 text-xs text-primary-500 hover:text-primary-700 transition-colors group"
-                title="Click to edit threshold"
-              >
-                <span className="material-symbols-outlined text-sm text-orange-500">warning</span>
-                <span>Alert ≤ {selectedItem.lowStockThreshold ?? 10}</span>
-                <span className="material-symbols-outlined text-xs opacity-0 group-hover:opacity-100 transition-opacity">edit</span>
-              </button>
+          <div className="space-y-3 h-[580px] flex flex-col">
+            {/* Unified Stats Bar - Variant Counts */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+              {/* Variant Counts */}
+              {selectedProduct ? (
+                <div className="flex items-center gap-3 text-sm">
+                  {(() => {
+                    const okCount = selectedProduct.sizeCount - selectedProduct.lowStockCount - selectedProduct.outOfStockCount;
+                    return (
+                      <>
+                        {okCount > 0 && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-green-500" />
+                            <strong className="text-green-600">{okCount}</strong>
+                            <span className="text-primary-500">{okCount === 1 ? 'size' : 'sizes'} OK</span>
+                          </span>
+                        )}
+                        {selectedProduct.lowStockCount > 0 && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500" />
+                            <strong className="text-amber-600">{selectedProduct.lowStockCount}</strong>
+                            <span className="text-primary-500">{selectedProduct.lowStockCount === 1 ? 'size' : 'sizes'} low</span>
+                          </span>
+                        )}
+                        {selectedProduct.outOfStockCount > 0 && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-red-500" />
+                            <strong className="text-red-600">{selectedProduct.outOfStockCount}</strong>
+                            <span className="text-primary-500">{selectedProduct.outOfStockCount === 1 ? 'size' : 'sizes'} out</span>
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="flex items-center gap-4 text-primary-600">
+                  <span>
+                    <strong className="text-green-600">{selectedItem.quantityOnHand}</strong> on hand
+                  </span>
+                  <span>
+                    <strong className="text-sky-600">{selectedItem.quantityOut || 0}</strong> issued
+                  </span>
+                </div>
+              )}
+              {!selectedProduct && (
+                <button
+                  onClick={() => setIsEditingThreshold(true)}
+                  className="ml-auto flex items-center gap-1.5 text-xs text-primary-500 hover:text-primary-700 transition-colors group"
+                  title="Click to edit threshold"
+                >
+                  <span className="material-symbols-outlined text-sm text-orange-500">warning</span>
+                  <span>Alert ≤ {selectedItem.lowStockThreshold ?? 10}</span>
+                  <span className="material-symbols-outlined text-xs opacity-0 group-hover:opacity-100 transition-opacity">edit</span>
+                </button>
+              )}
             </div>
 
             {/* Tabs Navigation - Compact */}
@@ -1245,7 +1655,7 @@ export function PPEInventory() {
                 {([
                   { id: 'overview', label: 'Overview', icon: 'info' },
                   { id: 'history', label: 'History', icon: 'history', count: activityLogs.length },
-                  { id: 'assignments', label: 'Assigned', icon: 'group', count: issuedRecords.length },
+                  { id: 'assignments', label: 'Assignments', icon: 'group', count: issuedRecords.length },
                 ] as { id: DetailModalTab; label: string; icon: string; count?: number }[]).map((tab) => (
                   <button
                     key={tab.id}
@@ -1305,289 +1715,18 @@ export function PPEInventory() {
               </div>
             )}
 
-            {/* Tab Content */}
+            {/* Tab Content - Fixed height to prevent modal size jumping */}
+            <div className="flex-1 overflow-y-auto">
             {detailModalTab === 'overview' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Left Column - Item Details */}
-                <div className="space-y-3">
-                  {/* Compact Item Details */}
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-base text-primary-400">category</span>
-                      <span className="text-primary-600">{selectedItem.categoryName}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-base text-primary-400">tag</span>
-                      <span className="font-mono text-primary-600">{selectedItem.legacyId || 'No ID'}</span>
-                    </div>
-                    {selectedItem.description && (
-                      <div className="col-span-2 text-primary-500 text-sm">
-                        {selectedItem.description}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quick Links */}
-                  <div className="flex items-center gap-4 pt-2 border-t border-border-default">
-                    <button
-                      onClick={() => setDetailModalTab('assignments')}
-                      className="flex items-center gap-1.5 text-sm text-purple-600 hover:text-purple-700 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-base">group</span>
-                      <span>{issuedRecords.length > 0 ? `${issuedRecords.length} assigned` : 'No assignments'}</span>
-                    </button>
-                    <button
-                      onClick={() => setDetailModalTab('history')}
-                      className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-base">history</span>
-                      <span>View history</span>
-                    </button>
-                  </div>
-
-                  {/* Identifiers (if present) */}
-                  {(selectedItem.serialNumber || selectedItem.barcode) && (
-                    <div className="pt-2 border-t border-border-default">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        {selectedItem.serialNumber && (
-                          <div>
-                            <label className="block text-xs font-medium text-primary-500 uppercase">Serial Number</label>
-                            <p className="mt-1 text-sm font-mono text-primary-900">{selectedItem.serialNumber}</p>
-                          </div>
-                        )}
-                        {selectedItem.barcode && (
-                          <div>
-                            <label className="block text-xs font-medium text-primary-500 uppercase">Barcode</label>
-                            <p className="mt-1 text-sm font-mono text-primary-900">{selectedItem.barcode}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Column - Quantity Adjustment */}
-                <div className="lg:border-l lg:border-border-default lg:pl-4">
-                  <h4 className="text-sm font-semibold text-primary-900 mb-3">Adjust Quantity</h4>
-
-              {/* Reason Buttons */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {([
-                  { id: 'count', label: 'Count', icon: 'calculate', color: 'bg-primary-100 text-primary-700' },
-                  { id: 'received', label: 'Received', icon: 'add_circle', color: 'bg-green-100 text-green-700' },
-                  { id: 'damaged', label: 'Damaged', icon: 'broken_image', color: 'bg-orange-100 text-orange-700' },
-                  { id: 'lost', label: 'Lost', icon: 'help', color: 'bg-red-100 text-red-700' },
-                  { id: 'returned', label: 'Returned', icon: 'keyboard_return', color: 'bg-blue-100 text-blue-700' },
-                  { id: 'issued', label: 'Issued', icon: 'arrow_forward', color: 'bg-purple-100 text-purple-700' },
-                ] as { id: AdjustmentReason; label: string; icon: string; color: string }[]).map((reason) => (
-                  <button
-                    key={reason.id}
-                    onClick={() => {
-                      setAdjustmentReason(reason.id);
-                      if (reason.id === 'count') {
-                        setAdjustmentQty(selectedItem.quantityOnHand);
-                      } else {
-                        setAdjustmentQty(0);
-                      }
-                    }}
-                    className={`p-2 rounded-lg text-xs font-medium border-2 transition-all flex flex-col items-center gap-1 ${
-                      adjustmentReason === reason.id
-                        ? 'border-action-primary ring-2 ring-action-primary/20 ' + reason.color
-                        : 'border-transparent ' + reason.color + ' opacity-60 hover:opacity-100'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-lg">{reason.icon}</span>
-                    {reason.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Quantity Input */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-primary-700 mb-1">
-                    {adjustmentReason === 'count' ? 'New Count' : 'Quantity'}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setAdjustmentQty(Math.max(0, adjustmentQty - 1))}
-                      className="w-10 h-10 rounded-lg bg-primary-100 text-primary-700 hover:bg-primary-200 flex items-center justify-center transition-colors"
-                    >
-                      <span className="material-symbols-outlined">remove</span>
-                    </button>
-                    <input
-                      type="number"
-                      min="0"
-                      value={adjustmentQty}
-                      onChange={(e) => setAdjustmentQty(parseInt(e.target.value) || 0)}
-                      className="flex-1 px-4 py-2 text-center text-lg font-semibold border border-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary"
-                    />
-                    <button
-                      onClick={() => setAdjustmentQty(adjustmentQty + 1)}
-                      className="w-10 h-10 rounded-lg bg-primary-100 text-primary-700 hover:bg-primary-200 flex items-center justify-center transition-colors"
-                    >
-                      <span className="material-symbols-outlined">add</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* User Selection for Issue */}
-              {adjustmentReason === 'issued' && (
-                <div className="mt-3">
-                  <label className="block text-sm font-medium text-primary-700 mb-1">
-                    Issue To <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative" ref={userDropdownRef}>
-                    {selectedUser ? (
-                      <div className="flex items-center justify-between p-3 border border-purple-300 bg-purple-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center">
-                            <span className="material-symbols-outlined text-sm text-purple-700">person</span>
-                          </div>
-                          <div>
-                            <div className="font-medium text-primary-900 text-sm">
-                              {selectedUser.firstName} {selectedUser.lastName}
-                            </div>
-                            <div className="text-xs text-primary-500">
-                              {selectedUser.employeeId && <span className="font-mono">{selectedUser.employeeId}</span>}
-                              {selectedUser.employeeId && selectedUser.department && ' • '}
-                              {selectedUser.department}
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setSelectedUserId('');
-                            setUserSearchQuery('');
-                          }}
-                          className="p-1 hover:bg-purple-200 rounded transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-sm text-primary-500">close</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-lg text-primary-400">
-                            person_search
-                          </span>
-                          <input
-                            type="text"
-                            value={userSearchQuery}
-                            onChange={(e) => {
-                              setUserSearchQuery(e.target.value);
-                              setShowUserDropdown(true);
-                            }}
-                            onFocus={() => setShowUserDropdown(true)}
-                            placeholder="Search for personnel..."
-                            className="w-full pl-10 pr-4 py-2.5 border border-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                          />
-                        </div>
-
-                        {/* User Dropdown */}
-                        {showUserDropdown && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-border-default z-50 max-h-48 overflow-y-auto">
-                            {filteredUsers.length === 0 ? (
-                              <div className="px-3 py-4 text-center text-sm text-primary-400">
-                                No users found
-                              </div>
-                            ) : (
-                              filteredUsers.slice(0, 10).map((user) => (
-                                <button
-                                  key={user.id}
-                                  onClick={() => {
-                                    setSelectedUserId(user.id);
-                                    setUserSearchQuery('');
-                                    setShowUserDropdown(false);
-                                  }}
-                                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-primary-50 transition-colors text-left"
-                                >
-                                  <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <span className="material-symbols-outlined text-sm text-primary-600">person</span>
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-primary-900 text-sm truncate">
-                                      {user.firstName} {user.lastName}
-                                    </div>
-                                    <div className="text-xs text-primary-500 truncate">
-                                      {user.employeeId && <span className="font-mono">{user.employeeId}</span>}
-                                      {user.employeeId && user.department && ' • '}
-                                      {user.department || user.email}
-                                    </div>
-                                  </div>
-                                </button>
-                              ))
-                            )}
-                            {filteredUsers.length > 10 && (
-                              <div className="px-3 py-2 text-xs text-primary-400 text-center border-t border-border-default">
-                                Type to narrow results ({filteredUsers.length - 10} more)
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Preview of change */}
-              {adjustmentReason !== 'count' && adjustmentQty > 0 && (
-                <div className="mt-3 p-3 bg-primary-50 rounded-lg text-sm">
-                  <span className="text-primary-600">Result: </span>
-                  <span className="font-semibold text-primary-900">
-                    {adjustmentReason === 'received' && `${selectedItem.quantityOnHand} + ${adjustmentQty} = ${selectedItem.quantityOnHand + adjustmentQty} on hand`}
-                    {adjustmentReason === 'damaged' && `${selectedItem.quantityOnHand} - ${adjustmentQty} = ${Math.max(0, selectedItem.quantityOnHand - adjustmentQty)} on hand`}
-                    {adjustmentReason === 'lost' && `${selectedItem.quantityOnHand} - ${adjustmentQty} = ${Math.max(0, selectedItem.quantityOnHand - adjustmentQty)} on hand`}
-                    {adjustmentReason === 'returned' && `${selectedItem.quantityOnHand} + ${adjustmentQty} = ${selectedItem.quantityOnHand + adjustmentQty} on hand, ${Math.max(0, (selectedItem.quantityOut || 0) - adjustmentQty)} out`}
-                    {adjustmentReason === 'issued' && (
-                      <>
-                        {Math.max(0, selectedItem.quantityOnHand - adjustmentQty)} on hand, {(selectedItem.quantityOut || 0) + adjustmentQty} out
-                        {selectedUser && (
-                          <span className="block text-purple-600 mt-1">
-                            → Issuing to {selectedUser.firstName} {selectedUser.lastName}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </span>
-                </div>
-              )}
-              {adjustmentReason === 'count' && adjustmentQty !== selectedItem.quantityOnHand && (
-                <div className="mt-3 p-3 bg-primary-50 rounded-lg text-sm">
-                  <span className="text-primary-600">Change: </span>
-                  <span className={`font-semibold ${adjustmentQty > selectedItem.quantityOnHand ? 'text-green-600' : 'text-red-600'}`}>
-                    {adjustmentQty > selectedItem.quantityOnHand ? '+' : ''}{adjustmentQty - selectedItem.quantityOnHand}
-                  </span>
-                </div>
-              )}
-
-              {/* Optional Note */}
-              <div className="mt-3">
-                <input
-                  type="text"
-                  value={adjustmentNote}
-                  onChange={(e) => setAdjustmentNote(e.target.value)}
-                  placeholder="Add a note (optional)"
-                  className="w-full px-3 py-2 text-sm border border-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-action-primary"
-                />
-              </div>
-
-              {/* Apply Button */}
-              <button
-                onClick={handleQuantityAdjustment}
-                disabled={
-                  isSubmitting ||
-                  (adjustmentReason === 'count' && adjustmentQty === selectedItem.quantityOnHand) ||
-                  (adjustmentReason !== 'count' && adjustmentQty === 0) ||
-                  (adjustmentReason === 'issued' && !selectedUserId)
-                }
-                className="mt-4 w-full px-4 py-3 text-sm font-medium text-white bg-action-primary rounded-lg hover:bg-action-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-lg">check</span>
-                {isSubmitting ? 'Applying...' : adjustmentReason === 'issued' && !selectedUserId ? 'Select a Person to Issue To' : 'Apply Adjustment'}
-              </button>
+              <div className="space-y-4">
+                {/* Size Quantity Grid - Full Width */}
+                <div>
+                  <h4 className="text-sm font-semibold text-primary-900 mb-3">All Sizes</h4>
+                  <SizeQuantityGrid
+                    selectedItem={selectedItem}
+                    pendingChanges={pendingQuantityChanges}
+                    onPendingChangesUpdate={setPendingQuantityChanges}
+                  />
                 </div>
               </div>
             )}
@@ -1739,6 +1878,7 @@ export function PPEInventory() {
                 )}
               </div>
             )}
+            </div>
           </div>
         )}
 
@@ -1755,7 +1895,7 @@ export function PPEInventory() {
           const editIsOneSize = isOneSizeCategory(editForm.categoryName || '');
 
           return (
-            <div className="space-y-3">
+            <div className="space-y-3 h-[580px]">
               {/* Row 1: Category, Subcategory, Manufacturer */}
               <div className="grid grid-cols-3 gap-3">
                 <div>

@@ -788,6 +788,96 @@ export interface PPEInventorySummary {
   categoryCounts: Record<string, number>;
 }
 
+// Grouped product interface for displaying one row per product (instead of per size)
+export interface GroupedProduct {
+  // Grouping key
+  variantId: string;
+
+  // Product info (same for all sizes)
+  itemTypeName: string;
+  manufacturer: string;
+  categoryName: string;
+  subcategory?: string;
+  type?: string;
+  femaCode: string;
+
+  // Aggregated data
+  sizes: PPEInventoryItem[];     // All size variants
+  sizeCount: number;             // Number of sizes
+  totalOnHand: number;           // Sum of quantityOnHand
+  totalOut: number;              // Sum of quantityOut
+  totalQuantity: number;         // totalOnHand + totalOut
+
+  // Status (worst case across sizes)
+  hasOutOfStock: boolean;        // Any size at 0
+  hasLowStock: boolean;          // Any size below threshold
+  lowStockCount: number;         // Count of low stock sizes
+  outOfStockCount: number;       // Count of out of stock sizes
+  overallStatus: 'In Stock' | 'Low Stock' | 'Out of Stock';
+}
+
+// Group inventory items by product (itemTypeName + manufacturer)
+export function groupInventoryByProduct(items: PPEInventoryItem[]): GroupedProduct[] {
+  const groups = new Map<string, PPEInventoryItem[]>();
+
+  items.forEach(item => {
+    const key = `${item.itemTypeName}||${item.manufacturer}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(item);
+  });
+
+  return Array.from(groups.entries()).map(([, sizes]) => {
+    const first = sizes[0];
+    const totalOnHand = sizes.reduce((sum, s) => sum + s.quantityOnHand, 0);
+    const totalOut = sizes.reduce((sum, s) => sum + (s.quantityOut || 0), 0);
+
+    // Count status by size
+    let outOfStockCount = 0;
+    let lowStockCount = 0;
+    sizes.forEach(s => {
+      const threshold = s.lowStockThreshold ?? 10;
+      if (s.quantityOnHand === 0) {
+        outOfStockCount++;
+      } else if (s.quantityOnHand <= threshold) {
+        lowStockCount++;
+      }
+    });
+
+    const hasOutOfStock = outOfStockCount > 0;
+    const hasLowStock = lowStockCount > 0;
+
+    // Sort sizes by sort order or name
+    const sortedSizes = [...sizes].sort((a, b) => {
+      const sizeA = ppeSizes.find(s => s.id === a.sizeId);
+      const sizeB = ppeSizes.find(s => s.id === b.sizeId);
+      if (sizeA?.sortOrder && sizeB?.sortOrder) {
+        return sizeA.sortOrder.localeCompare(sizeB.sortOrder);
+      }
+      return (a.sizeName || '').localeCompare(b.sizeName || '');
+    });
+
+    return {
+      variantId: first.variantId,
+      itemTypeName: first.itemTypeName,
+      manufacturer: first.manufacturer,
+      categoryName: first.categoryName,
+      subcategory: first.subcategory,
+      type: first.type,
+      femaCode: first.femaCode,
+      sizes: sortedSizes,
+      sizeCount: sizes.length,
+      totalOnHand,
+      totalOut,
+      totalQuantity: totalOnHand + totalOut,
+      hasOutOfStock,
+      hasLowStock,
+      lowStockCount,
+      outOfStockCount,
+      overallStatus: hasOutOfStock ? 'Out of Stock' : hasLowStock ? 'Low Stock' : 'In Stock',
+    };
+  });
+}
+
 // Estimate unit cost based on category and item characteristics
 // Per federal regulations (2 CFR 200), equipment >= $5,000 requires property records
 const EQUIPMENT_THRESHOLD = 5000;
@@ -1024,6 +1114,14 @@ export const ppeApi = {
     return Promise.resolve(grouped);
   },
 
+  // Get grouped inventory (one row per product instead of per size)
+  async getGroupedInventory(filters?: PPEInventoryFilters): Promise<GroupedProduct[]> {
+    // First get filtered items
+    const items = await this.getInventory(filters);
+    // Then group them
+    return Promise.resolve(groupInventoryByProduct(items));
+  },
+
   // Get low stock items
   async getLowStockItems(): Promise<PPEInventoryItem[]> {
     const items = ppeInventory.filter(item =>
@@ -1047,6 +1145,26 @@ export const ppeApi = {
   // Get issued/out items
   async getIssuedItems(): Promise<PPEInventoryItem[]> {
     const items = ppeInventory.filter(item => (item.quantityOut || 0) > 0);
+    return Promise.resolve(items);
+  },
+
+  // Get all sizes for a product by item type name (for size grid display)
+  async getSizesForProduct(itemTypeName: string, manufacturer?: string): Promise<PPEInventoryItem[]> {
+    let items = ppeInventory.filter(item => item.itemTypeName === itemTypeName);
+    // If manufacturer provided, also filter by that
+    if (manufacturer) {
+      items = items.filter(item => item.manufacturer === manufacturer);
+    }
+    // Sort by size (use sortOrder if available from ppeSizes, otherwise alphabetical)
+    items.sort((a, b) => {
+      // Try to find sort order from ppeSizes
+      const sizeA = ppeSizes.find(s => s.id === a.sizeId);
+      const sizeB = ppeSizes.find(s => s.id === b.sizeId);
+      if (sizeA?.sortOrder && sizeB?.sortOrder) {
+        return sizeA.sortOrder.localeCompare(sizeB.sortOrder);
+      }
+      return (a.sizeName || '').localeCompare(b.sizeName || '');
+    });
     return Promise.resolve(items);
   },
 
